@@ -3,7 +3,7 @@ import { BsCheckLg, BsXOctagonFill } from 'react-icons/bs';
 export interface VaultItem {
     id: number,
     username: string,
-    content: string,
+    message: string,
     pending: boolean,
 }
 
@@ -18,7 +18,7 @@ export default function VaultItemContainer({ vaultItem, onAccept, onDecline }: V
         <div className="flex justify-between items-center min-h-min px-4 py-2 bg-white rounded-md">
             <div className="flex flex-col">
                 <h3 className="opacity-75 text-lg">{vaultItem.username}</h3>
-                <p className="text-2xl">{vaultItem.content}</p>
+                <p className="text-2xl">{vaultItem.message}</p>
             </div>
 
             {vaultItem.pending && (
