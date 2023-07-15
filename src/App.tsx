@@ -1,64 +1,114 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FloatingButton } from './components/FloatingButton';
 import PageWrapper from './components/PageWrapper'
 import VaultItemContainer, { VaultItem } from './components/VaultItemContainer'
 import { FaDownload } from 'react-icons/fa';
 
-function App() {
-    const [mockPendingVaultItems, setMockPendingVaultItems] = useState([
-        {
-            id: 1,
-            username: "Solana",
-            content: "This is a test message",
-            pending: true
-        } as VaultItem,
-        {
-            id: 2,
-            username: "Jason",
-            content: "Lorum ipsum type vibe",
-            pending: true
-        } as VaultItem,
-    ]);
+const POLLING_TIME = 10000;
 
-    const [mockAcceptedVaultItems, setMockAcceptedVaultItems] = useState([
-        {
-            id: 3,
-            username: "Julie",
-            content: "this is a mock up item test test test",
-            pending: false
-        } as VaultItem,
-        {
-            id: 4,
-            username: "Chooky",
-            content: "no",
-            pending: false
-        } as VaultItem,
-    ]);
+function App() {
+    const [loading, setLoading] = useState<boolean>(true);
+    const [items, setItems] = useState<VaultItem[]>([]);
+
+    useEffect(() => {
+        retrieveItems();
+    }, []);
 
     function handleDownload() {
-        alert("[Debug] Downloading");
+        let content: string = "  _____ _           ___       _                 _ _      _____ _              ___                   _     \n" +
+            " |_   _(_)_ __  ___| __|_ _  (_)___ _  _ ___ __| ( )___ |_   _(_)_ __  ___   / __|__ _ _ __ ____  _| |___ \n" +
+            "   | | | | '  \\/ -_) _|| ' \\ | / _ \\ || / -_) _` |/(_-<   | | | | '  \\/ -_) | (__/ _` | '_ (_-< || | / -_)\n" +
+            "   |_| |_|_|_|_\\___|___|_||_|/ \\___/\\_, \\___\\__,_| /__/   |_| |_|_|_|_\\___|  \\___\\__,_| .__/__/\\_,_|_\\___|\n" +
+            "                           |__/     |__/                                              |_|                 \n\n\n";
+
+        for (let idx = 0; idx < items.length; idx++) {
+            const vaultItem = items[idx]
+
+            content += `${vaultItem.username}\n${vaultItem.message}\n\n`
+        }
+
+        const blob = new Blob([content], { type: 'text/plain' });
+
+        // Create a temporary URL for the blob
+        const url = URL.createObjectURL(blob);
+
+        // Create a link element
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = "timecapsule.txt";
+
+        // Append the link to the document body
+        document.body.appendChild(link);
+
+        // Simulate a click on the link to trigger the download
+        link.click();
+
+        // Clean up the URL object
+        URL.revokeObjectURL(url);
+
+        // Remove the link from the document body
+        document.body.removeChild(link);
     }
 
-    function onAccept(vaultItemId: number) {
-        const vaultItemIdx = mockPendingVaultItems.findIndex(vaultItem => vaultItem.id == vaultItemId);
+    async function retrieveItems() {
+        try {
+            const response = await fetch("http://localhost:3000/api/vault/items");
+            const { messages }: { messages: VaultItem[] } = await response.json();
 
-        setMockAcceptedVaultItems([...mockAcceptedVaultItems, {...mockPendingVaultItems[vaultItemIdx], pending: false}]);
-
-        // Remove item from useState array
-        setMockPendingVaultItems([
-            ...mockPendingVaultItems.slice(0, vaultItemIdx),
-            ...mockPendingVaultItems.slice(vaultItemIdx + 1, mockPendingVaultItems.length)
-        ])
+            setItems(messages);
+            setLoading(false);
+        } catch (err) {
+            alert(`[Error] ${err}`);
+        }
     }
 
-    function onDecline(vaultItemId: number) {
-        const vaultItemIdx = mockPendingVaultItems.findIndex(vaultItem => vaultItem.id == vaultItemId);
-        //
-        // Remove item from useState array
-        setMockPendingVaultItems([
-            ...mockPendingVaultItems.slice(0, vaultItemIdx),
-            ...mockPendingVaultItems.slice(vaultItemIdx + 1, mockPendingVaultItems.length)
-        ])
+    async function onAccept(vaultItemId: number) {
+        try {
+            const response = await fetch("http://localhost:3000/api/vault/approve", {
+                method: "POST",
+                body: JSON.stringify({
+                    id: vaultItemId,
+                }),
+                headers: {
+                    "Content-type": "application/json"
+                }
+            });
+            const { approvedItem }: { approvedItem: VaultItem } = await response.json();
+
+            setItems(items.map(vaultItem => vaultItem.id === approvedItem.id ? approvedItem : vaultItem))
+        } catch (err) {
+            alert(`[Error] ${err}`);
+        }
+    }
+
+    async function onDecline(vaultItemId: number) {
+        try {
+            const response = await fetch("http://localhost:3000/api/vault/reject", {
+                method: "POST",
+                body: JSON.stringify({
+                    id: vaultItemId,
+                }),
+                headers: {
+                    "Content-type": "application/json"
+                }
+            });
+            const { messages }: { messages: VaultItem[] } = await response.json();
+
+            setItems(messages);
+        } catch (err) {
+            alert(`[Error] ${err}`);
+        }
+    }
+
+    // Polling database for changes
+    useEffect(() => {
+        setTimeout(() => {
+            retrieveItems();
+        }, POLLING_TIME);
+    })
+
+    if (loading) {
+        return null;
     }
 
     return (
@@ -67,8 +117,8 @@ function App() {
                 <div className="flex flex-col gap-4 w-full">
                     <h1 className="text-4xl text-white font-medium">Pending Vault Items</h1>
                     {
-                        mockPendingVaultItems.map(vaultItem =>
-                            <VaultItemContainer vaultItem={vaultItem} onAccept={onAccept} onDecline={onDecline} />
+                        items.filter(item => item.pending).map(vaultItem =>
+                            <VaultItemContainer key={vaultItem.id} vaultItem={vaultItem} onAccept={onAccept} onDecline={onDecline} />
                         )
                     }
                 </div>
@@ -76,8 +126,8 @@ function App() {
                 <div className="flex flex-col gap-4 w-full">
                     <h1 className="text-4xl text-white font-medium">Accepted Items</h1>
                     {
-                        mockAcceptedVaultItems.map(vaultItem =>
-                            <VaultItemContainer vaultItem={vaultItem} onAccept={onAccept} onDecline={onDecline} />
+                        items.filter(item => !item.pending).map(vaultItem =>
+                            <VaultItemContainer key={vaultItem.id} vaultItem={vaultItem} onAccept={onAccept} onDecline={onDecline} />
                         )
                     }
                 </div>
